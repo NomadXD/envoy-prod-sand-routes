@@ -39,8 +39,7 @@ type AuthorizationServer struct{}
 func (a *AuthorizationServer) Check(ctx context.Context, req *auth.CheckRequest) (*auth.CheckResponse, error) {
 	log.Println(">>> Check() invoked from AuthorizationServer")
 
-	headers, err := json.Marshal(req.Attributes.Request.Http.Headers)
-	log.Println(string(headers))
+	_, err := json.Marshal(req.Attributes.Request.Http.Headers)
 	if err != nil {
 		log.Fatalf("Error marshalling request headers: %v", err)
 		return &auth.CheckResponse{
@@ -60,7 +59,28 @@ func (a *AuthorizationServer) Check(ctx context.Context, req *auth.CheckRequest)
 	authHeader, ok := req.Attributes.Request.Http.Headers["authorization"]
 	if ok {
 		var splitToken = strings.Split(authHeader, "Bearer ")
-		fmt.Printf("Token is : %v", splitToken[1])
+		fmt.Printf("Token : %v", splitToken[1])
+		claims := &Claims{}
+		tkn, err := jwt.ParseWithClaims(splitToken[1], claims, func(token *jwt.Token) (interface{}, error) {
+			return jwtKey, nil
+		})
+		if err != nil && !tkn.Valid {
+			log.Printf("Error parsing token: %v", err)
+			return &auth.CheckResponse{
+				Status: &rpcstatus.Status{
+					Code: int32(codes.Unauthenticated),
+				},
+				HttpResponse: &auth.CheckResponse_DeniedResponse{
+					DeniedResponse: &auth.DeniedHttpResponse{
+						Status: &envoy_type.HttpStatus{
+							Code: envoy_type.StatusCode_Unauthorized,
+						},
+						Body: "Token expired or malformed",
+					},
+				},
+			}, nil
+		}
+		log.Printf("Deployment: %v", claims.Deployment)
 		return &auth.CheckResponse{
 			Status: &rpcstatus.Status{
 				Code: int32(codes.OK),
@@ -71,29 +91,25 @@ func (a *AuthorizationServer) Check(ctx context.Context, req *auth.CheckRequest)
 						{
 							Header: &envoy_config_core_v3.HeaderValue{
 								Key:   "x-wso2-cluster",
-								Value: "sandbox",
+								Value: claims.Deployment,
 							},
 						},
 					},
 				},
 			},
-			// DynamicMetadata: &structpb.Struct{
-			// 	Fields: map[string]*structpb.Value{
-			// 		"test": {
-			// 			Kind: &structpb.Value_StringValue{
-			// 				StringValue: "123456",
-			// 			},
-			// 		},
-			// 	},
-			// },
 		}, nil
 	}
 	return &auth.CheckResponse{
 		Status: &rpcstatus.Status{
-			Code: int32(codes.OK),
+			Code: int32(codes.Unauthenticated),
 		},
-		HttpResponse: &auth.CheckResponse_OkResponse{
-			OkResponse: &auth.OkHttpResponse{},
+		HttpResponse: &auth.CheckResponse_DeniedResponse{
+			DeniedResponse: &auth.DeniedHttpResponse{
+				Status: &envoy_type.HttpStatus{
+					Code: envoy_type.StatusCode_Unauthorized,
+				},
+				Body: "No authorization header found",
+			},
 		},
 	}, nil
 
@@ -101,7 +117,7 @@ func (a *AuthorizationServer) Check(ctx context.Context, req *auth.CheckRequest)
 
 func prodToken(w http.ResponseWriter, req *http.Request) {
 	claims := &Claims{
-		Deployment: "PRODUCTION",
+		Deployment: "clusterProd",
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: expirationTime.Unix(),
 		},
@@ -116,7 +132,7 @@ func prodToken(w http.ResponseWriter, req *http.Request) {
 
 func sandToken(w http.ResponseWriter, req *http.Request) {
 	claims := &Claims{
-		Deployment: "SANDBOX",
+		Deployment: "clusterSand",
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: expirationTime.Unix(),
 		},

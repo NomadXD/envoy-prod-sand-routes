@@ -22,7 +22,7 @@ static_resources:
               "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
               grpc_service:
                 envoy_grpc:
-                  cluster_name: ext-authz
+                  cluster_name: ext_authz
                 timeout: 0.5s
               transport_api_version: V3
               clear_route_cache: true
@@ -48,22 +48,40 @@ static_resources:
                   headers:
                     - name: x-wso2-cluster
                       string_match:
-                        exact: "sandbox"
+                        exact: "clusterSand"
                 route:
                   prefix_rewrite: /bar
-                  cluster: sandbox_server
+                  cluster_header: x-wso2-cluster
               - match:
                   prefix: "/api/v1"
                 route:
                   prefix_rewrite: /foo
-                  cluster: production_server
+                  cluster_header: x-wso2-cluster
+              - match:
+                  prefix: "/token/prod"
+                route:
+                  prefix_rewrite: /prod
+                  cluster: token_server
+                typed_per_filter_config:
+                  envoy.filters.http.ext_authz:
+                    "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute
+                    disabled: true
+              - match:
+                  prefix: "/token/sand"
+                route:
+                  prefix_rewrite: /sand
+                  cluster: token_server
+                typed_per_filter_config:
+                  envoy.filters.http.ext_authz:
+                    "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute
+                    disabled: true
 
   clusters:
-  - name: production_server
+  - name: clusterProd
     type: LOGICAL_DNS
     dns_lookup_family: V4_ONLY
     load_assignment:
-      cluster_name: production_server
+      cluster_name: clusterProd
       endpoints:
       - lb_endpoints:
         - endpoint:
@@ -72,11 +90,11 @@ static_resources:
                 address: localhost
                 port_value: 8001
 
-  - name: sandbox_server
+  - name: clusterSand
     type: LOGICAL_DNS
     dns_lookup_family: V4_ONLY
     load_assignment:
-      cluster_name: sandbox_server
+      cluster_name: clusterSand
       endpoints:
       - lb_endpoints:
         - endpoint:
@@ -85,7 +103,7 @@ static_resources:
                 address: localhost
                 port_value: 8002
 
-  - name: ext-authz
+  - name: ext_authz
     type: LOGICAL_DNS
     typed_extension_protocol_options:
       envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
@@ -93,7 +111,7 @@ static_resources:
         explicit_http_config:
           http2_protocol_options: {}
     load_assignment:
-      cluster_name: ext-authz
+      cluster_name: ext_authz
       endpoints:
       - lb_endpoints:
         - endpoint:
@@ -102,3 +120,16 @@ static_resources:
                 address: 127.0.0.1
                 port_value: 50051
     connect_timeout: 0.25s
+
+  - name: token_server
+    type: LOGICAL_DNS
+    dns_lookup_family: V4_ONLY
+    load_assignment:
+      cluster_name: token_server
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: localhost
+                port_value: 8080
