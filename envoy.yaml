@@ -5,7 +5,7 @@ static_resources:
     address:
       socket_address:
         address: 0.0.0.0
-        port_value: 10000
+        port_value: 9095
     filter_chains:
     - filters:
       - name: envoy.filters.network.http_connection_manager
@@ -87,7 +87,7 @@ static_resources:
         - endpoint:
             address:
               socket_address:
-                address: localhost
+                address: backend
                 port_value: 8001
 
   - name: clusterSand
@@ -100,7 +100,7 @@ static_resources:
         - endpoint:
             address:
               socket_address:
-                address: localhost
+                address: backend
                 port_value: 8002
 
   - name: ext_authz
@@ -117,7 +117,7 @@ static_resources:
         - endpoint:
             address:
               socket_address:
-                address: 127.0.0.1
+                address: ext-authz
                 port_value: 50051
     connect_timeout: 0.25s
 
@@ -131,5 +131,5 @@ static_resources:
         - endpoint:
             address:
               socket_address:
-                address: localhost
+                address: ext-authz
                 port_value: 8080
